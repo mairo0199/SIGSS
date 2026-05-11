@@ -49,7 +49,7 @@ const StudentDashboard = ({ user, onLogout }) => {
   const handlePrediction = async () => {
     setLoading(true);
     try {
-      const response = await axios.post('https://sigss-3.onrender.com/api/ia/predict', {
+      const response = await axios.post('https://sigss-2.onrender.com/api/ia/predict', {
         horas,
         actividades: actividades.length
       });

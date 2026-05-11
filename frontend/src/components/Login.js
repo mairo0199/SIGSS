@@ -40,7 +40,7 @@ const Login = ({ onLogin }) => {
 
     try {
       // CONEXIÓN REAL AL BACKEND
-      const response = await axios.post('https://sigss-3.onrender.com/api/login', {
+      const response = await axios.post('https://sigss-2.onrender.com/api/login', {
         correo: formData.username,
         password: formData.password
       });
