@@ -9,6 +9,9 @@ const iaRutas = require('./rutas/ia');
 const app = express();
 
 // Middlewares (Reglas de seguridad y formato de datos)
+app.get("/", (req, res) => {
+    res.send("Servidor funcionando correctamente");
+});
 app.use(cors());
 app.use(express.json());
 
