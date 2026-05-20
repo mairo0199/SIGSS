@@ -3,10 +3,15 @@ import {
   Users, CheckCircle, XCircle, AlertCircle, Mail, 
   FileText, TrendingUp, Clock, Calendar, LogOut 
 } from 'lucide-react';
+import axios from 'axios';
 
 const SupervisorDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const mainContentRef = useRef(null);
+  const [actividades, setActividades] = useState([]);
+  const [estudiantes, setEstudiantes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [horasValidadasHoy, setHorasValidadasHoy] = useState(0);
 
   // Efecto ascensor: sube al inicio de la página al cambiar de pestaña
   useEffect(() => {
@@ -15,31 +20,59 @@ const SupervisorDashboard = ({ user, onLogout }) => {
     }
   }, [activeTab]);
 
-  const [actividades, setActividades] = useState([
-    { id: 1, estudiante: 'Ana García', fecha: '2026-03-01', desc: 'Taller de capacitación comunitaria', horas: 8, estado: 'Pendiente', proyecto: 'Proyecto Comunitario' },
-    { id: 2, estudiante: 'Juan Pérez', fecha: '2026-03-05', desc: 'Apoyo en biblioteca escolar', horas: 12, estado: 'Pendiente', proyecto: 'Apoyo Educativo' },
-    { id: 3, estudiante: 'María Rodríguez', fecha: '2026-03-10', desc: 'Limpieza de áreas verdes', horas: 6, estado: 'Pendiente', proyecto: 'Medio Ambiente' },
-  ]);
-
-  const [estudiantes] = useState([
-    { nombre: 'Ana García', horas: 320, progreso: 67, estado: 'Activo' },
-    { nombre: 'Carlos López', horas: 450, progreso: 94, estado: 'Por terminar' },
-    { nombre: 'María Rodríguez', horas: 180, progreso: 38, estado: 'En riesgo' },
-    { nombre: 'Juan Pérez', horas: 120, progreso: 25, estado: 'En riesgo' },
-  ]);
+  // Cargar datos del backend
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [actividadesRes, estudiantesRes, metricsRes] = await Promise.all([
+          axios.get(`https://sigss-2.onrender.com/api/supervisor/actividades/${user?.id}`),
+          axios.get(`https://sigss-2.onrender.com/api/supervisor/estudiantes/${user?.id}`),
+          axios.get(`https://sigss-2.onrender.com/api/supervisor/metrics/${user?.id}`)
+        ]);
+        
+        setActividades(actividadesRes.data || []);
+        setEstudiantes(estudiantesRes.data || []);
+        setHorasValidadasHoy(metricsRes.data?.horas_validadas_hoy || 0);
+      } catch (error) {
+        console.error('Error cargando datos del supervisor:', error);
+        setActividades([]);
+        setEstudiantes([]);
+        setHorasValidadasHoy(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    if (user?.id) {
+      fetchData();
+    }
+  }, [user?.id]);
 
   const pendientes = actividades.filter(a => a.estado === 'Pendiente');
 
-  const handleApprove = (id) => {
-    setActividades(prev => prev.map(a => 
-      a.id === id ? { ...a, estado: 'Aprobada' } : a
-    ));
+  const handleApprove = async (id) => {
+    try {
+      await axios.post(`https://sigss-2.onrender.com/api/supervisor/aprobar-actividad/${id}`);
+      setActividades(prev => prev.map(a => 
+        a.id === id ? { ...a, estado: 'Aprobada' } : a
+      ));
+    } catch (error) {
+      console.error('Error aprobando actividad:', error);
+      alert('Error al aprobar actividad');
+    }
   };
 
-  const handleReject = (id) => {
-    setActividades(prev => prev.map(a => 
-      a.id === id ? { ...a, estado: 'Rechazada' } : a
-    ));
+  const handleReject = async (id) => {
+    try {
+      await axios.post(`https://sigss-2.onrender.com/api/supervisor/rechazar-actividad/${id}`);
+      setActividades(prev => prev.map(a => 
+        a.id === id ? { ...a, estado: 'Rechazada' } : a
+      ));
+    } catch (error) {
+      console.error('Error rechazando actividad:', error);
+      alert('Error al rechazar actividad');
+    }
   };
 
   const DashboardHeader = () => (
@@ -70,7 +103,7 @@ const SupervisorDashboard = ({ user, onLogout }) => {
         <div className="text-gray-600 mt-1">Pendientes de Validar</div>
       </div>
       <div className="metric-card border-l-4 border-green-500">
-        <div className="text-3xl font-bold text-green-500">48</div>
+        <div className="text-3xl font-bold text-green-500">{horasValidadasHoy}</div>
         <div className="text-gray-600 mt-1">Horas Validadas Hoy</div>
       </div>
     </div>
@@ -210,8 +243,32 @@ const SupervisorDashboard = ({ user, onLogout }) => {
               <div className="custom-card">
                 <h3 className="font-semibold mb-4 flex items-center"><Mail className="w-5 h-5 mr-2 text-primary-600" /> Acciones Rápidas</h3>
                 <div className="space-y-2">
-                  <button className="w-full btn-secondary text-sm py-2">Enviar recordatorio a "En riesgo"</button>
-                  <button className="w-full btn-secondary text-sm py-2">Descargar PDF de horas del mes</button>
+                  <button className="w-full btn-secondary text-sm py-2" onClick={async () => {
+                    try {
+                      await axios.post(`https://sigss-2.onrender.com/api/supervisor/enviar-recordatorios/${user?.id}`);
+                      alert('Recordatorios enviados exitosamente');
+                    } catch (error) {
+                      console.error('Error enviando recordatorios:', error);
+                      alert('Error al enviar recordatorios. Por favor intenta nuevamente.');
+                    }
+                  }}>Enviar recordatorio a "En riesgo"</button>
+                  <button className="w-full btn-secondary text-sm py-2" onClick={async () => {
+                    try {
+                      const response = await axios.get(`https://sigss-2.onrender.com/api/supervisor/descargar-pdf/${user?.id}`, {
+                        responseType: 'blob'
+                      });
+                      const url = window.URL.createObjectURL(new Blob([response.data]));
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.setAttribute('download', 'horas_mes.pdf');
+                      document.body.appendChild(link);
+                      link.click();
+                      link.remove();
+                    } catch (error) {
+                      console.error('Error descargando PDF:', error);
+                      alert('Error al descargar PDF. Por favor intenta nuevamente.');
+                    }
+                  }}>Descargar PDF de horas del mes</button>
                 </div>
               </div>
             </div>

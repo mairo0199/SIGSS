@@ -8,10 +8,19 @@ import {
   BarChart, Bar, LineChart, Line, PieChart as RePieChart, 
   Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
+import axios from 'axios';
 
 const AdminDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const mainContentRef = useRef(null);
+
+  const [usuarios, setUsuarios] = useState([]);
+  const [instituciones, setInstituciones] = useState([]);
+  const [riskData, setRiskData] = useState([]);
+  const [trendData, setTrendData] = useState([]);
+  const [auditoria, setAuditoria] = useState([]);
+  const [metrics, setMetrics] = useState({ usuarios: 0, instituciones: 0, proyectos: 0, horas: 0 });
+  const [loading, setLoading] = useState(true);
 
   // Efecto ascensor automático para cambios de sección
   useEffect(() => {
@@ -20,38 +29,47 @@ const AdminDashboard = ({ user, onLogout }) => {
     }
   }, [activeTab]);
 
-  // Datos de ejemplo para la presentación
-  const usuarios = [
-    { id: 1, nombre: 'Ana García', rol: 'Alumno', estado: 'Activo', ultimo_acceso: '2026-04-20' },
-    { id: 2, nombre: 'Carlos López', rol: 'Encargado', estado: 'Activo', ultimo_acceso: '2026-04-21' },
-    { id: 3, nombre: 'María Rodríguez', rol: 'Alumno', estado: 'Inactivo', ultimo_acceso: '2026-03-28' },
-    { id: 4, nombre: 'Gerardo García', rol: 'Administrador', estado: 'Activo', ultimo_acceso: '2026-04-23' },
-  ];
-
-  const instituciones = [
-    { nombre: 'Universidad de Guadalajara', estudiantes: 45, encargados: 3, estado: 'Activa' },
-    { nombre: 'Instituto Tecnológico', estudiantes: 28, encargados: 2, estado: 'Activa' },
-    { nombre: 'Colegio Profesional', estudiantes: 18, encargados: 1, estado: 'Pendiente' },
-  ];
-
-  const riskData = [
-    { name: 'Bajo', value: 85, color: '#10b981' },
-    { name: 'Moderado', value: 42, color: '#f59e0b' },
-    { name: 'Alto', value: 18, color: '#ef4444' },
-    { name: 'Crítico', value: 11, color: '#dc2626' },
-  ];
-
-  const trendData = [
-    { mes: 'Ene', estudiantes: 12 }, { mes: 'Feb', estudiantes: 18 },
-    { mes: 'Mar', estudiantes: 24 }, { mes: 'Abr', estudiantes: 32 },
-    { mes: 'May', estudiantes: 28 }, { mes: 'Jun', estudiantes: 35 },
-  ];
-
-  const auditoria = [
-    { fecha: '2026-04-23 10:30', usuario: 'admin', accion: 'Inicio de sesión', ip: '192.168.1.100' },
-    { fecha: '2026-04-23 09:15', usuario: 'supervisor1', accion: 'Validación de horas', ip: '192.168.1.101' },
-    { fecha: '2026-04-22 16:45', usuario: 'alumno24', accion: 'Registro actividad', ip: '192.168.1.102' },
-  ];
+  // Cargar datos del backend
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [usersRes, instRes, auditRes, metricsRes] = await Promise.all([
+          axios.get('https://sigss-2.onrender.com/api/admin/usuarios'),
+          axios.get('https://sigss-2.onrender.com/api/admin/instituciones'),
+          axios.get('https://sigss-2.onrender.com/api/admin/auditoria'),
+          axios.get('https://sigss-2.onrender.com/api/admin/metrics')
+        ]);
+        
+        setUsuarios(usersRes.data || []);
+        setInstituciones(instRes.data || []);
+        setAuditoria(auditRes.data || []);
+        setMetrics(metricsRes.data || { usuarios: 0, instituciones: 0, proyectos: 0, horas: 0 });
+        
+        // Datos de gráficas (se pueden calcular o obtener del backend)
+        setRiskData([
+          { name: 'Bajo', value: metricsRes.data?.riesgo_bajo || 0, color: '#10b981' },
+          { name: 'Moderado', value: metricsRes.data?.riesgo_moderado || 0, color: '#f59e0b' },
+          { name: 'Alto', value: metricsRes.data?.riesgo_alto || 0, color: '#ef4444' },
+          { name: 'Crítico', value: metricsRes.data?.riesgo_critico || 0, color: '#dc2626' },
+        ]);
+        
+        setTrendData(metricsRes.data?.tendencia || []);
+      } catch (error) {
+        console.error('Error cargando datos:', error);
+        // Valores por defecto si falla la conexión
+        setUsuarios([]);
+        setInstituciones([]);
+        setAuditoria([]);
+        setRiskData([]);
+        setTrendData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, []);
 
   const DashboardHeader = () => (
     <div className="mb-8">
@@ -73,19 +91,19 @@ const AdminDashboard = ({ user, onLogout }) => {
   const AdminMetrics = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       <div className="metric-card">
-        <div className="text-3xl font-bold text-primary-600">156</div>
+        <div className="text-3xl font-bold text-primary-600">{metrics.usuarios}</div>
         <div className="text-gray-600 mt-1">Usuarios Totales</div>
       </div>
       <div className="metric-card">
-        <div className="text-3xl font-bold text-blue-600">24</div>
+        <div className="text-3xl font-bold text-blue-600">{metrics.instituciones}</div>
         <div className="text-gray-600 mt-1">Instituciones</div>
       </div>
       <div className="metric-card">
-        <div className="text-3xl font-bold text-green-600">18</div>
+        <div className="text-3xl font-bold text-green-600">{metrics.proyectos}</div>
         <div className="text-gray-600 mt-1">Proyectos Activos</div>
       </div>
       <div className="metric-card">
-        <div className="text-3xl font-bold text-purple-600">45,280</div>
+        <div className="text-3xl font-bold text-purple-600">{metrics.horas.toLocaleString()}</div>
         <div className="text-gray-600 mt-1">Horas Registradas</div>
       </div>
     </div>
@@ -128,8 +146,8 @@ const AdminDashboard = ({ user, onLogout }) => {
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-lg font-semibold flex items-center"><Users className="w-5 h-5 mr-2" /> Usuarios</h3>
         <div className="flex space-x-2">
-          <button className="btn-secondary flex items-center"><Search className="w-4 h-4 mr-2" /> Buscar</button>
-          <button className="btn-primary flex items-center"><Plus className="w-4 h-4 mr-2" /> Nuevo</button>
+          <button className="btn-secondary flex items-center" onClick={() => alert('Función de búsqueda disponible cuando se implemente el endpoint de búsqueda')}><Search className="w-4 h-4 mr-2" /> Buscar</button>
+          <button className="btn-primary flex items-center" onClick={() => alert('Función de crear usuario disponible cuando se implemente el endpoint de creación')}><Plus className="w-4 h-4 mr-2" /> Nuevo</button>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -173,12 +191,27 @@ const AdminDashboard = ({ user, onLogout }) => {
           </div>
         ))}
       </div>
-      <form className="p-4 border-2 border-dashed border-gray-200 rounded-xl">
+      <form className="p-4 border-2 border-dashed border-gray-200 rounded-xl" onSubmit={async (e) => {
+        e.preventDefault();
+        const nombre = e.target.elements[0].value;
+        const email = e.target.elements[1].value;
+        try {
+          await axios.post('https://sigss-2.onrender.com/api/admin/instituciones', { nombre, email_contacto: email });
+          alert('Institución registrada exitosamente');
+          // Recargar instituciones
+          const instRes = await axios.get('https://sigss-2.onrender.com/api/admin/instituciones');
+          setInstituciones(instRes.data || []);
+          e.target.reset();
+        } catch (error) {
+          console.error('Error registrando institución:', error);
+          alert('Error al registrar institución. Por favor intenta nuevamente.');
+        }
+      }}>
         <h4 className="font-semibold mb-4">Añadir Institución</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <input type="text" placeholder="Nombre" className="w-full" />
-          <input type="email" placeholder="Email contacto" className="w-full" />
-          <button type="button" className="btn-primary md:col-span-2">Registrar</button>
+          <input type="text" placeholder="Nombre" className="w-full" required />
+          <input type="email" placeholder="Email contacto" className="w-full" required />
+          <button type="submit" className="btn-primary md:col-span-2">Registrar</button>
         </div>
       </form>
     </div>

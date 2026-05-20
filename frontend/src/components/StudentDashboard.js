@@ -8,23 +8,14 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import axios from 'axios';
 
 const StudentDashboard = ({ user, onLogout }) => {
-  const [horas, setHoras] = useState(120);
-  
-  const [actividades, setActividades] = useState([
-    { id: 1, fecha: '2026-03-01', desc: 'Taller de capacitación comunitaria', horas: 8, estado: 'Aprobada', proyecto: 'Proyecto Comunitario' },
-    { id: 2, fecha: '2026-03-05', desc: 'Apoyo en biblioteca escolar', horas: 12, estado: 'Aprobada', proyecto: 'Apoyo Educativo' },
-    { id: 3, fecha: '2026-03-10', desc: 'Limpieza de áreas verdes', horas: 6, estado: 'Pendiente', proyecto: 'Medio Ambiente' },
-  ]);
-  
-  const [notificaciones, setNotificaciones] = useState([
-    'Bienvenido al sistema!',
-    'Actividad \'Limpieza de áreas verdes\' pendiente de aprobación',
-    'Recordatorio: Faltan 360 horas para completar'
-  ]);
-  
+  const [horas, setHoras] = useState(0);
+  const [actividades, setActividades] = useState([]);
+  const [notificaciones, setNotificaciones] = useState([]);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [prediction, setPrediction] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [weeklyData, setWeeklyData] = useState([]);
+  const [dataLoading, setDataLoading] = useState(true);
 
   const mainContentRef = useRef(null);
 
@@ -35,16 +26,42 @@ const StudentDashboard = ({ user, onLogout }) => {
     }
   }, [activeTab]);
 
+  // Cargar datos del backend
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setDataLoading(true);
+        const [actividadesRes, horasRes, notificacionesRes, weeklyRes] = await Promise.all([
+          axios.get(`https://sigss-2.onrender.com/api/estudiante/actividades/${user?.id}`),
+          axios.get(`https://sigss-2.onrender.com/api/estudiante/horas/${user?.id}`),
+          axios.get(`https://sigss-2.onrender.com/api/estudiante/notificaciones/${user?.id}`),
+          axios.get(`https://sigss-2.onrender.com/api/estudiante/progreso-semanal/${user?.id}`)
+        ]);
+        
+        setActividades(actividadesRes.data || []);
+        setHoras(horasRes.data?.horas || 0);
+        setNotificaciones(notificacionesRes.data || []);
+        setWeeklyData(weeklyRes.data || []);
+      } catch (error) {
+        console.error('Error cargando datos del estudiante:', error);
+        // Valores por defecto si falla la conexión
+        setActividades([]);
+        setHoras(0);
+        setNotificaciones(['Bienvenido al sistema!']);
+        setWeeklyData([]);
+      } finally {
+        setDataLoading(false);
+      }
+    };
+    
+    if (user?.id) {
+      fetchData();
+    }
+  }, [user?.id]);
+
   const restantes = 480 - horas;
   const progreso = Math.round((horas / 480) * 100);
   const semanasEstimadas = Math.max(1, Math.floor((480 - horas) / 15));
-
-  const weeklyData = [
-    { semana: 1, horas: 15 }, { semana: 2, horas: 32 }, { semana: 3, horas: 48 },
-    { semana: 4, horas: 65 }, { semana: 5, horas: 82 }, { semana: 6, horas: 98 },
-    { semana: 7, horas: 115 }, { semana: 8, horas: 132 }, { semana: 9, horas: 148 },
-    { semana: 10, horas: 165 }, { semana: 11, horas: 182 }, { semana: 12, horas: 200 },
-  ];
 
   const handlePrediction = async () => {
     setLoading(true);
@@ -237,16 +254,31 @@ const StudentDashboard = ({ user, onLogout }) => {
       desc: '', proyecto: 'Proyecto Comunitario', horas: 8, fecha: new Date().toISOString().split('T')[0]
     });
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
       e.preventDefault();
-      const newActivity = {
-        id: actividades.length + 1, ...formData, estado: 'Pendiente', fecha_registro: new Date().toISOString().split('T')[0]
-      };
-      setActividades([...actividades, newActivity]);
-      setNotificaciones([...notificaciones, `Actividad '${formData.desc.substring(0, 30)}...' registrada para revisión`]);
-      setFormData({ desc: '', proyecto: 'Proyecto Comunitario', horas: 8, fecha: new Date().toISOString().split('T')[0] });
-      
-      setActiveTab('actividades');
+      try {
+        const response = await axios.post('https://sigss-2.onrender.com/api/estudiante/registrar-actividad', {
+          estudiante_id: user?.id,
+          descripcion: formData.desc,
+          proyecto: formData.proyecto,
+          horas: formData.horas,
+          fecha: formData.fecha
+        });
+        
+        const newActivity = {
+          id: response.data.id || actividades.length + 1,
+          ...formData,
+          estado: 'Pendiente',
+          fecha_registro: new Date().toISOString().split('T')[0]
+        };
+        setActividades([...actividades, newActivity]);
+        setNotificaciones([...notificaciones, `Actividad '${formData.desc.substring(0, 30)}...' registrada para revisión`]);
+        setFormData({ desc: '', proyecto: 'Proyecto Comunitario', horas: 8, fecha: new Date().toISOString().split('T')[0] });
+        setActiveTab('actividades');
+      } catch (error) {
+        console.error('Error registrando actividad:', error);
+        alert('Error al registrar actividad. Por favor intenta nuevamente.');
+      }
     };
 
     return (
@@ -323,52 +355,126 @@ const StudentDashboard = ({ user, onLogout }) => {
   );
 
   const DocumentsTab = () => {
-    const documents = [
-      { nombre: 'Reglamento de Servicio Social', estado: '📄 Disponible', fecha: '15/01/2026' },
-      { nombre: 'Formato de Reporte Mensual', estado: '✅ Completado', fecha: '20/02/2026' },
-      { nombre: 'Certificado de Horas Parciales', estado: '⏳ En proceso', fecha: '01/03/2026' },
-    ];
+    const [documents, setDocuments] = useState([]);
+    const [docsLoading, setDocsLoading] = useState(true);
+
+    useEffect(() => {
+      const fetchDocuments = async () => {
+        try {
+          const response = await axios.get(`https://sigss-2.onrender.com/api/estudiante/documentos/${user?.id}`);
+          setDocuments(response.data || []);
+        } catch (error) {
+          console.error('Error cargando documentos:', error);
+          setDocuments([]);
+        } finally {
+          setDocsLoading(false);
+        }
+      };
+      
+      if (user?.id) {
+        fetchDocuments();
+      }
+    }, [user?.id]);
+
+    if (docsLoading) {
+      return (
+        <div className="custom-card">
+          <h3 className="text-lg font-semibold mb-4 flex items-center"><FileText className="w-5 h-5 mr-2" />Gestión Documental</h3>
+          <div className="text-center py-8 text-gray-500">Cargando documentos...</div>
+        </div>
+      );
+    }
+
     return (
       <div className="custom-card">
         <h3 className="text-lg font-semibold mb-4 flex items-center"><FileText className="w-5 h-5 mr-2" />Gestión Documental</h3>
-        <div className="space-y-3">
-          {documents.map((doc, index) => (
-            <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-              <div>
-                <div className="font-medium">{doc.nombre}</div>
-                <div className="text-sm text-gray-500">{doc.fecha}</div>
+        {documents.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">No hay documentos disponibles</div>
+        ) : (
+          <div className="space-y-3">
+            {documents.map((doc, index) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <div className="font-medium">{doc.nombre}</div>
+                  <div className="text-sm text-gray-500">{doc.fecha}</div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm">{doc.estado}</span>
+                  <button className="btn-secondary py-1 px-3 text-sm" onClick={async () => {
+                    try {
+                      const response = await axios.get(`https://sigss-2.onrender.com/api/estudiante/descargar-documento/${doc.id}`, {
+                        responseType: 'blob'
+                      });
+                      const url = window.URL.createObjectURL(new Blob([response.data]));
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.setAttribute('download', doc.nombre);
+                      document.body.appendChild(link);
+                      link.click();
+                      link.remove();
+                    } catch (error) {
+                      console.error('Error descargando documento:', error);
+                      alert('Error al descargar documento. Por favor intenta nuevamente.');
+                    }
+                  }}><Download className="w-4 h-4" /></button>
+                </div>
               </div>
-              <div className="flex items-center space-x-2">
-                <span className="text-sm">{doc.estado}</span>
-                <button className="btn-secondary py-1 px-3 text-sm"><Download className="w-4 h-4" /></button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
 
   const CalendarTab = () => {
-    const eventos = [
-      { fecha: '15 Abr', evento: 'Taller de Capacitación', hora: '10:00 AM' },
-      { fecha: '20 Abr', evento: 'Revisión de Progreso', hora: '2:00 PM' },
-      { fecha: '30 Abr', evento: 'Entrega Final del Sistema', hora: '11:59 PM' },
-    ];
+    const [eventos, setEventos] = useState([]);
+    const [eventsLoading, setEventsLoading] = useState(true);
+
+    useEffect(() => {
+      const fetchEvents = async () => {
+        try {
+          const response = await axios.get(`https://sigss-2.onrender.com/api/estudiante/calendario/${user?.id}`);
+          setEventos(response.data || []);
+        } catch (error) {
+          console.error('Error cargando calendario:', error);
+          setEventos([]);
+        } finally {
+          setEventsLoading(false);
+        }
+      };
+      
+      if (user?.id) {
+        fetchEvents();
+      }
+    }, [user?.id]);
+
+    if (eventsLoading) {
+      return (
+        <div className="custom-card">
+          <h3 className="text-lg font-semibold mb-4 flex items-center"><Calendar className="w-5 h-5 mr-2" />Calendario de Actividades</h3>
+          <div className="text-center py-8 text-gray-500">Cargando calendario...</div>
+        </div>
+      );
+    }
+
     return (
       <div className="custom-card">
         <h3 className="text-lg font-semibold mb-4 flex items-center"><Calendar className="w-5 h-5 mr-2" />Calendario de Actividades</h3>
-        <div className="space-y-3">
-          {eventos.map((evento, index) => (
-            <div key={index} className="flex items-center p-3 bg-gray-50 rounded-lg">
-              <div className="bg-primary-600 text-white px-3 py-2 rounded-lg mr-4">{evento.fecha}</div>
-              <div className="flex-1">
-                <div className="font-medium">{evento.evento}</div>
-                <div className="text-sm text-gray-500">⏰ {evento.hora}</div>
+        {eventos.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">No hay eventos programados</div>
+        ) : (
+          <div className="space-y-3">
+            {eventos.map((evento, index) => (
+              <div key={index} className="flex items-center p-3 bg-gray-50 rounded-lg">
+                <div className="bg-primary-600 text-white px-3 py-2 rounded-lg mr-4">{evento.fecha}</div>
+                <div className="flex-1">
+                  <div className="font-medium">{evento.evento}</div>
+                  <div className="text-sm text-gray-500">⏰ {evento.hora}</div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
